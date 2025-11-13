@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Prerequisites
 *.d
 
@@ -32,10 +33,48 @@
 *.exe
 *.out
 *.app
+=======
+########################
+# Project data dirs
+########################
+
+/input/
+/output/
+/BACKUP/
+
+########################
+# Compiled object files
+########################
+
+*.o
+*.obj
+
+########################
+# Libraries
+########################
+
+*.a
+*.la
+*.lo
+*.so
+*.so.*
+*.dll
+*.dylib
+
+########################
+# Executables / binaries
+########################
+
+*.exe
+*.out
+*.app
+a.out
+>>>>>>> f3cb49f (Initial commit)
 *.i*86
 *.x86_64
 *.hex
 
+<<<<<<< HEAD
 # Debug files
 *.dSYM/
 *.su
@@ -53,3 +92,76 @@ dkms.conf
 
 # debug information files
 *.dwo
+=======
+########################
+# Debug / profiling / coverage
+########################
+
+*.dSYM/
+*.su
+*.gcno
+*.gcda
+*.gcov
+*.prof
+*.profraw
+
+########################
+# Build / generated files
+########################
+
+/build/
+/_build/
+/dist/
+/bin/
+/obj/
+/out/
+
+# Common build system outputs
+/autom4te.cache/
+/.deps/
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/meson-logs/
+/meson-private/
+Makefile
+makefile
+compile_commands.json
+/compile_commands.json
+
+########################
+# Temporary / backup files
+########################
+
+*~
+*.swp
+*.swo
+*.tmp
+*.bak
+
+########################
+# IDE / editor metadata
+########################
+
+# VS Code
+.vscode/
+
+# CLion / IntelliJ
+.idea/
+
+# Emacs
+\#*\#
+.\#*
+
+# Vim
+*.swp
+*.swo
+
+########################
+# OS files
+########################
+
+.DS_Store
+Thumbs.db
+
+>>>>>>> f3cb49f (Initial commit)
