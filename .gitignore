@@ -38,8 +38,14 @@
 # Project data dirs
 ########################
 
-/input/
-/output/
+# Ignore everything in input/, except the placeholder file
+input/*
+!input/.gitkeep
+#
+# # Ignore everything in output/, except the placeholder file
+output/*
+!output/.gitkeep
+#
 /BACKUP/
 
 ########################
@@ -124,8 +130,6 @@ dkms.conf
 /cmake_install.cmake
 /meson-logs/
 /meson-private/
-Makefile
-makefile
 compile_commands.json
 /compile_commands.json
 
