@@ -419,7 +419,8 @@ static void phase1(Aircraft *aircrafts,int count,int X,double ref_lat,double ref
     }
     double elapsed_time = elapsed_ms(t0);
     int cores = omp_get_max_threads();
-    printf("[Time] Phase 1 (Vincenty) compute runtime: %.3f ms\n",elapsed_time);
+    printf("[Time] Phase 1 (Vincenty) compute runtime: %.3f ms with %d threads\n",
+           elapsed_time, cores);
     log_timing(LOG_FILE,"Phase1_Vincenty_OMP",count,cores,elapsed_time);
     run_three_sorts_fullarray_and_report(aircrafts, count, X, 1, ref_lat, ref_lon, csv_name);
 }
@@ -433,8 +434,11 @@ static void phase2(Aircraft *aircrafts,int count,int X,double ref_lat,double ref
     }
     double elapsed_time = elapsed_ms(t0);
     int cores = omp_get_max_threads();
-    printf("[Time] Phase 2 (Full Haversine) compute runtime: %.3f ms\n",elapsed_time);
+    printf("[Time] Phase 2 (Full Haversine) compute runtime: %.3f ms with %d threads\n",
+           elapsed_time, cores);
     log_timing(LOG_FILE,"Phase2_FullHaversine_OMP",count,cores,elapsed_time);
+
+
     run_three_sorts_fullarray_and_report(aircrafts, count, X, 2, ref_lat, ref_lon, csv_name);
 }
 
@@ -448,8 +452,11 @@ static void phase3(Aircraft *aircrafts,int count,int X,double ref_lat,double ref
     }
     double elapsed_time = elapsed_ms(t0);
     int cores = omp_get_max_threads();
-    printf("[Time] Phase 3 (Half Haversine 'a') compute runtime: %.3f ms\n",elapsed_time);
+    printf("[Time] Phase 3 (Half Haversine 'a') compute runtime: %.3f ms with %d threads\n",
+           elapsed_time, cores);
     log_timing(LOG_FILE,"Phase3_HalfHaversine_OMP",count,cores,elapsed_time);
+
+
     run_three_sorts_fullarray_and_report(aircrafts, count, X, 3, ref_lat, ref_lon, csv_name);
 }
 
@@ -619,64 +626,60 @@ static void phase4(Aircraft *arr,int count,int X,double ref_lat,double ref_lon, 
     int cores = omp_get_max_threads();
     printf("Bounding-box survivors: %d of %d\n", bbox_survivors, count);
     printf("Post-equirectangular survivors (unique aircraft, merged): %d\n", k_unique);
-    printf("Phase 4 runtime: %.3f ms\n", elapsed_time);
+    printf("Phase 4 runtime: %.3f ms with %d threads\n", elapsed_time, cores);
     log_timing(LOG_FILE,"Phase4_PruneRefine_Equirect_OMP",count,cores,elapsed_time);
-
     print_top_from_idx(arr, idx_refined, k_unique, X, 4, ref_lat, ref_lon,
 		                           "Phase 4 (Adaptive Pruning, Equirectangular, OMP)");
     write_csv_from_idx(csv_name, arr, idx_refined, k_unique, X, 4, ref_lat, ref_lon);
 
     free(idx_refined);
 }
-
-// ---------- main ---------- 
+// ---------- main ----------
+// ---------- main ----------
 int main(int argc,char *argv[]){
     Args args = parse_args(argc, argv);
 
     if (args.phase < 1 || args.phase > 4){
         fprintf(stderr,
-            "Usage: %s --phase {1|2|3|4} [lat lon X] [--data-file <path>] [--use-rows N]\n", argv[0]);
+            "Usage: %s --phase {1|2|3|4} [lat lon X] [--data-file <path>] [--use-rows rows_per_thread]\n", argv[0]);
         fprintf(stderr,
-            "Example: %s --phase=3 30.4733 -87.1866 25 --data-file input/myfile.csv --use-rows 10000000\n", argv[0]);
+            "Example: %s --phase=3 30.4733 -87.1866 25 "
+            "--data-file input/myfile.csv --use-rows 3000000\n", argv[0]);
         return 1;
     }
 
-    int threads = omp_get_max_threads();
-
-    /* Short phase tag for filename */
+    /* Short phase tag for filenames */
     const char *phase_tag =
         (args.phase==1) ? "phase1" :
         (args.phase==2) ? "phase2" :
         (args.phase==3) ? "phase3" : "phase4";
 
-    /* Example: output/phase1-output-omp-8t.csv */
-    static char auto_name[256];
-    snprintf(auto_name, sizeof(auto_name),"output/%s-output-omp-%dt.csv", phase_tag, threads);
-
     if (ensure_dir("output") != 0){
         perror("ensure_dir(\"output\")");
     }
+
     printf("Phase: %d\n", args.phase);
-    printf("Threads: %d\n", threads);
-    printf("Output: %s\n", auto_name);
     printf("Ref: (%.4f, %.4f), TopX=%d\n", args.ref_lat, args.ref_lon, args.topX);
     printf("Data file: %s\n", args.data_file);
     if (args.use_rows > 0) {
-        printf("Use rows (max): %d\n", args.use_rows);
+        printf("Weak-scaling base: %d rows per thread (from --use-rows)\n",
+               args.use_rows);
+    } else {
+        printf("Weak-scaling base: (will choose automatically if needed)\n");
     }
 
-
+    /* -------- load data ONCE (may be many CSV / .gz files) -------- */
     int capacity = 0;
-    int count = 0;
+    int global_count = 0;
     Aircraft *aircrafts = NULL;
     int rc = 0;
 
     printf("Data file: %s\n", args.data_file);
 
     if (strpbrk(args.data_file, "*?[]") != NULL) {
-        rc = load_csv_pattern(args.data_file, &aircrafts, &count, &capacity);
+        rc = load_csv_pattern(args.data_file, &aircrafts, &global_count, &capacity);
     } else {
-        rc = load_csv(args.data_file, &aircrafts, &count, &capacity);
+        rc = load_csv(args.data_file, &aircrafts, &global_count, &capacity);
     }
 
     if (rc != 0) {
@@ -685,27 +688,78 @@ int main(int argc,char *argv[]){
         return 1;
     }
 
-    printf("Loaded %d records\n", count);
-
-    if (args.use_rows > 0 && count > args.use_rows) {
-        printf("Capping to first %d rows due to --use-rows\n", args.use_rows);
-        count = args.use_rows;
-    }
-
-
-    if (count == 0) {
+    printf("Loaded %d records total\n", global_count);
+    if (global_count == 0) {
         free(aircrafts);
         return 0;
     }
 
-    // show timer resolution once 
+    // show timer resolution once
     print_timer_res();
 
-    if      (args.phase==1) phase1(aircrafts,count,args.topX,args.ref_lat,args.ref_lon,auto_name);
-    else if (args.phase==2) phase2(aircrafts,count,args.topX,args.ref_lat,args.ref_lon,auto_name);
-    else if (args.phase==3) phase3(aircrafts,count,args.topX,args.ref_lat,args.ref_lon,auto_name);
-    else                    phase4(aircrafts,count,args.topX,args.ref_lat,args.ref_lon,auto_name);
+    int max_threads = omp_get_max_threads();
+    printf("Max available OpenMP threads (this run): %d\n", max_threads);
+
+    /* -------- configure thread sweep (weak scaling) --------
+       Example: 1 -> 3M rows, 2 -> 6M rows, 4 -> 12M rows, ...
+       You can tweak this list as desired.
+    */
+    int thread_list[] = {1, 2, 4, 8, 12, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 127};
+    int n_thread_list = (int)(sizeof(thread_list) / sizeof(thread_list[0]));
+
+    /* base rows-per-thread: from --use-rows if given, otherwise fall back */
+    int base_rows_per_thread = args.use_rows;
+    if (base_rows_per_thread <= 0) {
+        /* Fallback heuristic: distribute total rows roughly evenly
+           over max_threads, so the largest T uses almost all rows. */
+        base_rows_per_thread = (global_count + max_threads - 1) / max_threads;
+        printf("Auto base_rows_per_thread = %d\n", base_rows_per_thread);
+    }
+
+    for (int ti = 0; ti < n_thread_list; ++ti) {
+        int T = thread_list[ti];
+        if (T < 1 || T > max_threads) {
+            continue;   // skip if this many threads isn’t available
+        }
+
+        omp_set_num_threads(T);
+
+        /* rows_for_T = base_rows_per_thread * T, clamped to total rows */
+        long long want_rows = (long long)base_rows_per_thread * (long long)T;
+        int rows_for_T = (want_rows > global_count) ? global_count : (int)want_rows;
+
+        if (rows_for_T <= 0) {
+            continue;
+        }
+
+        char csv_name[256];
+        /* Example: output/phase1-output-omp-1t-3000000rows.csv */
+        snprintf(csv_name, sizeof(csv_name),
+                 "output/%s-output-omp-%dt-%drows.csv",
+                 phase_tag, T, rows_for_T);
+
+        printf("\n========================================\n");
+        printf("Running phase %d with %d OpenMP threads\n", args.phase, T);
+        printf("Using first %d of %d rows (base %d rows/thread)\n",
+               rows_for_T, global_count, base_rows_per_thread);
+        printf("Output: %s\n", csv_name);
+        printf("========================================\n");
+
+        if      (args.phase==1)
+            phase1(aircrafts, rows_for_T, args.topX,
+                   args.ref_lat, args.ref_lon, csv_name);
+        else if (args.phase==2)
+            phase2(aircrafts, rows_for_T, args.topX,
+                   args.ref_lat, args.ref_lon, csv_name);
+        else if (args.phase==3)
+            phase3(aircrafts, rows_for_T, args.topX,
+                   args.ref_lat, args.ref_lon, csv_name);
+        else
+            phase4(aircrafts, rows_for_T, args.topX,
+                   args.ref_lat, args.ref_lon, csv_name);
+    }
 
     free(aircrafts);
     return 0;
 }
+
